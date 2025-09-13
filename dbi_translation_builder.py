@@ -77,37 +77,77 @@ def build_translations_directly():
     """Build translations directly using the downloaded dbipatcher.exe"""
     print("[INFO] Building translations using pre-built dbipatcher.exe...")
     
-    # 提取基础文件
-    if not run_dbipatcher_command(["--extract", "dbi/DBI.810.ru.nro", "--output", "temp/DBI_810"]):
+    # 首先检查可执行文件是否存在
+    if not check_dbipatcher_installed():
         return False
     
-    # 转换基础文件
-    if not run_dbipatcher_command(["--convert", "temp/DBI_810/rec6.bin", "--output", "translate/rec6.810.ru.txt", "--keys", "temp/DBI_810/keys_ru.txt"]):
-        return False
+    # 检查是否已经存在转换好的基础文本文件
+    base_text_file = "translate/rec6.810.ru.txt"
+    if os.path.exists(base_text_file):
+        print(f"[INFO] Base text file already exists: {base_text_file}")
+        print("[INFO] Skipping extraction and conversion of base file")
+    else:
+        # 提取基础文件
+        print("[INFO] Extracting base DBI file...")
+        if not run_dbipatcher_command(["--extract", "dbi/DBI.810.ru.nro", "--output", "temp/DBI_810"]):
+            return False
+        
+        # 转换基础文件
+        print("[INFO] Converting base binary to text...")
+        if not run_dbipatcher_command(["--convert", "temp/DBI_810/rec6.bin", "--output", base_text_file, "--keys", "temp/DBI_810/keys_ru.txt"]):
+            print("[WARNING] Base conversion failed, but continuing with existing languages")
+            # 如果基础转换失败，但仍然尝试构建其他语言
     
-    # 获取可用语言列表
-    trans_files = [f for f in os.listdir("translate") if f.startswith("rec6.810.") and f.endswith(".txt") and not f.startswith("rec6.810.ru.")]
+    # 获取可用语言列表（包括基础语言）
+    trans_files = []
+    if os.path.exists("translate"):
+        trans_files = [f for f in os.listdir("translate") if f.startswith("rec6.810.") and f.endswith(".txt")]
+    
     languages = [f.replace("rec6.810.", "").replace(".txt", "") for f in trans_files]
+    
+    # 移除基础语言，只处理翻译语言
+    if "ru" in languages:
+        languages.remove("ru")
     
     print(f"[INFO] Found {len(languages)} translation languages: {', '.join(languages)}")
     
+    if len(languages) == 0:
+        print("[ERROR] No translation files found in translate/ directory")
+        return False
+    
     # 为每种语言构建翻译
+    success_count = 0
     for lang in languages:
         print(f"[INFO] Building translation for language: {lang}")
         
-        # 提取keys
-        if not run_dbipatcher_command(["--extract-keys", "dbi/DBI.810.ru.nro", "--output", f"temp/DBI_810/keys_{lang}.txt", "--lang", lang]):
-            continue
-        
-        # 转换翻译文件
-        if not run_dbipatcher_command(["--convert", f"translate/rec6.810.{lang}.txt", "--output", f"temp/DBI_810/rec6.{lang}.bin", "--keys", f"temp/DBI_810/keys_{lang}.txt"]):
-            continue
-        
-        # 打补丁生成最终文件
-        if not run_dbipatcher_command(["--patch", f"temp/DBI_810/rec6.{lang}.bin", "--binary", "dbi/DBI.810.ru.nro", "--output", f"temp/DBI_810/bin/DBI.810.{lang}.nro", "--slot", "6"]):
+        try:
+            # 确保输出目录存在
+            os.makedirs("temp/DBI_810/bin", exist_ok=True)
+            
+            # 提取keys
+            keys_file = f"temp/DBI_810/keys_{lang}.txt"
+            if not os.path.exists(keys_file):
+                if not run_dbipatcher_command(["--extract-keys", "dbi/DBI.810.ru.nro", "--output", keys_file, "--lang", lang]):
+                    continue
+            
+            # 转换翻译文件
+            bin_file = f"temp/DBI_810/rec6.{lang}.bin"
+            if not run_dbipatcher_command(["--convert", f"translate/rec6.810.{lang}.txt", "--output", bin_file, "--keys", keys_file]):
+                continue
+            
+            # 打补丁生成最终文件
+            output_file = f"temp/DBI_810/bin/DBI.810.{lang}.nro"
+            if not run_dbipatcher_command(["--patch", bin_file, "--binary", "dbi/DBI.810.ru.nro", "--output", output_file, "--slot", "6"]):
+                continue
+            
+            success_count += 1
+            print(f"[SUCCESS] Completed translation for {lang}")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to build translation for {lang}: {str(e)}")
             continue
     
-    return True
+    return success_count > 0
 
 def auto_build_all(skip_build=False):
     """Non-interactive mode: Automatically execute full language build"""
