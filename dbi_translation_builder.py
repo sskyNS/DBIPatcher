@@ -3,6 +3,13 @@ import subprocess
 import sys
 import shutil
 import argparse 
+import codecs
+import io
+
+if sys.stdout.encoding != 'UTF-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stderr.encoding != 'UTF-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 def check_make_installed():
     """检查make是否已安装"""
@@ -11,7 +18,8 @@ def check_make_installed():
             ["make", "--version"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            encoding='utf-8'  # 添加编码参数
         )
         return True
     except FileNotFoundError:
@@ -29,7 +37,8 @@ def run_make_command(target=None):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            shell=True  # 适配Windows环境
+            encoding='utf-8',  # 添加编码参数
+            shell=True
         )
 
         if result.stdout:
