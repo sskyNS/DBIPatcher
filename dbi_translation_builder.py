@@ -86,11 +86,9 @@ def auto_build_all():
     """Non-interactive mode: Automatically execute full language build (for CI/CD)"""
     print("[INFO] Starting automatic build process for all languages...")
     
-    print("\n[STEP 1/4] Cleaning previous builds")
-    if not run_make_command("clean"):
-        return False
-    if not run_make_command("clean-translate"):
-        return False
+    print("\n[STEP 1/4] Skipping clean step (not compatible with Windows CI)")
+    # 跳过 make clean 步骤，因为在 Windows CI 环境中会失败
+    # 直接进行下一步
     
     print("\n[STEP 2/4] Deleting old binary payloads")
     if not delete_old_bin_files():
