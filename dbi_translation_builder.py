@@ -28,13 +28,19 @@ def check_dbipatcher_installed():
 def run_dbipatcher_command(args):
     """Run dbipatcher command directly"""
     try:
+        dbipatcher_path = os.path.join("bin", "dbipatcher.exe")
+        
+        if not os.path.exists(dbipatcher_path):
+            print(f"[ERROR] dbipatcher.exe not found at: {dbipatcher_path}")
+            return False
+        
         result = subprocess.run(
-            ["bin/dbipatcher.exe"] + args,
+            [dbipatcher_path] + args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             encoding='utf-8',
-            shell=True
+            shell=True  # 在Windows上使用shell=True
         )
 
         if result.stdout:
