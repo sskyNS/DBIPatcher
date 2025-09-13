@@ -116,7 +116,7 @@ jobs:
         name: dbipatcher-windows
         path: bin/
 
-    - name: Install Python (运行脚本依赖)
+    - name: Install Python (for script dependency)
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'  
@@ -127,54 +127,51 @@ jobs:
         echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
         make --version  
 
-    - name: 检查基础DBI文件（必须存在，否则无法构建）
+    - name: Check base DBI file (must exist for build)
       run: |
         echo "Checking base DBI file: dbi/DBI.810.ru.nro"
         if (-not (Test-Path "dbi/DBI.810.ru.nro")) {
-            echo "ERROR: 基础文件 dbi/DBI.810.ru.nro 不存在！"
-            echo "请将原始DBI文件放入 dbi/ 目录后重试。"
+            echo "ERROR: Base file dbi/DBI.810.ru.nro does not exist!"
+            echo "Please place the original DBI file in the dbi/ directory and try again."
             exit 1
         } else {
             $fileSize = [math]::Round((Get-Item 'dbi/DBI.810.ru.nro').Length/1MB, 2)
-            echo "✓ 找到基础文件（大小：$fileSize MB）"
+            echo "✓ Found base file (size: $fileSize MB)"
         }
 
-    - name: 运行Python脚本（自动构建所有语言）
+    - name: Run Python script (build all languages automatically)
       run: |
-        # 设置控制台编码为UTF-8并运行Python脚本
-        chcp 65001
-        python -X utf8 dbi_translation_builder.py --build-all
+        python dbi_translation_builder.py --build-all
       env:
-        PYTHONIOENCODING: utf-8
         PATH: ${{ env.PATH }};C:\ProgramData\chocolatey\bin;C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
 
-    - name: 验证翻译文件生成
+    - name: Verify translation file generation
       run: |
         $outputDir = "temp/DBI_810/bin"
         if (-not (Test-Path $outputDir)) {
-            echo "ERROR: 翻译输出目录 $outputDir 不存在"
+            echo "ERROR: Translation output directory $outputDir does not exist"
             exit 1
         }
       
         $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
         if ($transFiles.Count -eq 0) {
-            echo "ERROR: 未生成任何翻译文件"
+            echo "ERROR: No translation files were generated"
             exit 1
         }
-        echo "✓ 成功生成 $($transFiles.Count) 个翻译文件："
+        echo "✓ Successfully generated $($transFiles.Count) translation files:"
         foreach ($file in $transFiles) {
             $fileSize = [math]::Round($file.Length/1KB, 2)
             echo "  - $($file.Name) ($fileSize KB)"
         }
 
-    - name: 上传翻译文件Artifact
+    - name: Upload translation artifacts
       uses: actions/upload-artifact@v4
       with:
         name: dbi-translated-versions
         path: temp/DBI_810/bin/
         if-no-files-found: error
 
-    - name: 生成翻译构建报告
+    - name: Generate translation build report
       run: |
         $summary = "## DBI Translation Build Report`n`n"
         $summary += "**Build Time:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`n"
@@ -183,17 +180,17 @@ jobs:
         
         $outputDir = "temp/DBI_810/bin"
         $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
-        $summary += "### 生成的翻译文件（共 $($transFiles.Count) 个）`n"
+        $summary += "### Generated Translation Files (Total: $($transFiles.Count))`n"
         foreach ($file in $transFiles) {
             $fileSize = [math]::Round($file.Length/1KB, 2)
             $summary += "- $($file.Name) ($fileSize KB)`n"
         }
         
-        # 保存报告
+        # Save report
         $summary | Out-File -FilePath "translation-report.md" -Encoding UTF8
         Get-Content "translation-report.md"
 
-    - name: 上传构建报告
+    - name: Upload build report
       uses: actions/upload-artifact@v4
       with:
         name: translation-report
@@ -209,16 +206,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
   
-    - name: 下载所有构建产物
+    - name: Download all build artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
 
-    - name: 整理Release资产
+    - name: Prepare release assets
       run: |
         mkdir -p release_assets
         
-        # 1. 整理各平台工具
+        # 1. Organize platform tools
         cp artifacts/dbipatcher-windows/dbipatcher.exe release_assets/dbipatcher-windows-${{ github.ref_name }}.exe
         cp artifacts/dbipatcher-windows/libzstd.dll release_assets/libzstd.dll
         cp artifacts/dbipatcher-linux/dbipatcher release_assets/dbipatcher-linux-${{ github.ref_name }}
@@ -237,30 +234,45 @@ jobs:
           cp artifacts/translation-report/translation-report.md release_assets/
         fi
         
-        echo "=== 最终Release资产 ==="
+        echo "=== Final Release Assets ==="
         ls -la release_assets/
 
-    - name: 创建GitHub Release
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
         name: DBI Patcher ${{ github.ref_name }}
         body: |
-          ## DBI Patcher 自动构建发布
+          ## DBI Patcher Automated Build Release
           
-          ### 包含内容
-          - 各平台工具（Windows/Linux/macOS）
-          - 多语言翻译包（已压缩）
-          - 构建报告
+          ### Included Content
+          - Platform tools (Windows/Linux/macOS)
+          - Multi-language translation packages (compressed)
+          - Build report
           
-          ### 使用说明
-          1. 下载对应平台的工具（如Windows用户下载 dbipatcher-windows-${{ github.ref_name }}.exe）
-          2. 下载翻译包（dbi-translations-${{ github.ref_name }}.zip）
-          3. 运行工具：`./dbipatcher --help` 查看命令
+          ### Usage Instructions
+          1. Download the tool for your platform (e.g., Windows users download dbipatcher-windows-${{ github.ref_name }}.exe)
+          2. Download translation package (dbi-translations-${{ github.ref_name }}.zip)
+          3. Run the tool: `./dbipatcher --help` to view commands
           
-          ### 翻译支持语言
-          自动构建所有配置的语言（详见 translation-report.md）
+          ### Supported Translation Languages
+          Automatically built for all configured languages (see translation-report.md for details)
+          
+          ### Build Information
+          - **Build Date:** ${{ github.event.repository.updated_at }}
+          - **Commit:** ${{ github.sha }}
+          - **Tag:** ${{ github.ref_name }}
+          
+          ### Notes
+          - Translation builds require the original DBI.810.ru.nro file
+          - Make sure to download libzstd.dll for Windows version
+          - Linux/macOS versions require execution permissions: `chmod +x dbipatcher-*`
         draft: false
         prerelease: false
         files: |
-          release_assets/*
+          release_assets/dbipatcher-windows-${{ github.ref_name }}.exe
+          release_assets/libzstd.dll
+          release_assets/dbipatcher-linux-${{ github.ref_name }}
+          release_assets/dbipatcher-macos-${{ github.ref_name }}
+          release_assets/dbi-translations-${{ github.ref_name }}.zip
+          release_assets/translation-report.md
