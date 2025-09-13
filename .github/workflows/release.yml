@@ -3,14 +3,16 @@ name: Release DBI Patcher
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'  
     paths:
       - 'translate/**.txt'
       - 'DBIPatcher/translate/**.txt'
+      - 'dbi_translation_builder.py'  
   pull_request:
     paths:
       - 'translate/**.txt'
       - 'DBIPatcher/translate/**.txt'
+      - 'dbi_translation_builder.py'
 
 permissions:
   contents: write
@@ -99,7 +101,7 @@ jobs:
 
   build-translations:
     runs-on: windows-latest
-    needs: [build-windows]
+    needs: [build-windows]  
     if: contains(github.event.head_commit.message, 'translate') || contains(github.event.head_commit.message, 'translation') || github.event_name == 'push'
     
     steps:
@@ -112,158 +114,153 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: dbipatcher-windows
-        path: bin/
+        path: bin/  # 脚本需要调用bin/dbipatcher.exe
+
+    - name: Install Python（运行脚本依赖）
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'  
+        cache: 'pip'  
 
     - name: Install make and tools
       run: |
         choco install make -y
         echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+        make --version  
 
-    - name: Verify translation files
+    - name: 检查基础DBI文件（必须存在，否则无法构建）
       run: |
-        echo "Checking translation files..."
-        if (Test-Path "translate") {
-            Get-ChildItem -Path "translate" -Filter "*.txt"
-        }
-        if (Test-Path "DBIPatcher/translate") {
-            Get-ChildItem -Path "DBIPatcher/translate" -Filter "*.txt"
-        }
-
-    - name: Check for base DBI file
-      run: |
-        echo "Checking for base DBI file..."
+        echo "Checking base DBI file: dbi/DBI.810.ru.nro"
         if (-not (Test-Path "dbi/DBI.810.ru.nro")) {
-            echo "Warning: Base DBI file dbi/DBI.810.ru.nro not found!"
-            echo "Creating dummy directory structure for testing..."
-            mkdir -p dbi
-            echo "DBI_TEST_FILE" | Out-File -Encoding ASCII "dbi/DBI.810.ru.nro"
-            echo "Created test file for workflow continuity"
+            echo "ERROR: 基础文件 dbi/DBI.810.ru.nro 不存在！"
+            echo "请将原始DBI文件放入 dbi/ 目录后重试。"
+            exit 1  # 无基础文件，构建无意义，直接报错
         } else {
-            echo "✓ Base DBI file found: dbi/DBI.810.ru.nro"
-            echo "File size: $((Get-Item 'dbi/DBI.810.ru.nro').Length) bytes"
+            $fileSize = [math]::Round((Get-Item 'dbi/DBI.810.ru.nro').Length/1MB, 2)
+            echo "✓ 找到基础文件（大小：$fileSize MB）"
         }
 
-    - name: List available languages
+    - name: 运行Python脚本（自动构建所有语言）
       run: |
-        make list-languages --no-print-directory
+        
+        python dbi_translation_builder.py --build-all
+      env:
+       
+        PATH: ${{ env.PATH }};C:\ProgramData\chocolatey\bin;C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
 
-    - name: Build all translations 
+    - name: 验证翻译文件生成
       run: |
-        echo "Building all translations using make targets..."
-        
-        make --no-print-directory
-        
-        make translate-all --no-print-directory
-        
-        if (Test-Path "temp/DBI_810/bin") {
-            echo "Translation builds completed successfully!"
-            echo "Generated files:"
-            Get-ChildItem -Path "temp/DBI_810/bin" -Recurse -File
-        } else {
-            echo "Error: No translation files were generated"
+        $outputDir = "temp/DBI_810/bin"
+        if (-not (Test-Path $outputDir)) {
+            echo "ERROR: 翻译输出目录 $outputDir 不存在"
             exit 1
         }
+      
+        $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
+        if ($transFiles.Count -eq 0) {
+            echo "ERROR: 未生成任何翻译文件"
+            exit 1
+        }
+        echo "✓ 成功生成 $($transFiles.Count) 个翻译文件："
+        foreach ($file in $transFiles) {
+            $fileSize = [math]::Round($file.Length/1KB, 2)
+            echo "  - $($file.Name) ($fileSize KB)"
+        }
 
-    - name: Upload translation artifacts
+    - name: 上传翻译文件Artifact
       uses: actions/upload-artifact@v4
       with:
         name: dbi-translated-versions
         path: temp/DBI_810/bin/
         if-no-files-found: error
 
-    - name: Create translation summary
+    - name: 生成翻译构建报告
       run: |
-        $summary = "## DBI Translation Build Results`n`n"
-        $summary += "**Build Date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n"
-        $summary += "**Commit:** $env:GITHUB_SHA`n`n"
+        $summary = "## DBI Translation Build Report`n`n"
+        $summary += "**Build Time:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`n"
+        $summary += "**Commit Hash:** $env:GITHUB_SHA`n"
+        $summary += "**Tag:** $($env:GITHUB_REF -replace 'refs/tags/','')`n`n"
         
-        $summary += "### Generated Files:`n"
-        if (Test-Path "temp/DBI_810/bin") {
-            $files = Get-ChildItem -Path "temp/DBI_810/bin" -Recurse -File
-            foreach ($file in $files) {
-                $summary += "- $($file.Name) ($([math]::Round($file.Length/1KB, 2)) KB)`n"
-            }
-        } else {
-            $summary += "No files were generated`n"
+        $outputDir = "temp/DBI_810/bin"
+        $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
+        $summary += "### 生成的翻译文件（共 $($transFiles.Count) 个）`n"
+        foreach ($file in $transFiles) {
+            $fileSize = [math]::Round($file.Length/1KB, 2)
+            $summary += "- $($file.Name) ($fileSize KB)`n"
         }
         
-        $summary | Out-File -FilePath "translation-summary.md" -Encoding UTF8
-        Get-Content "translation-summary.md"
+        # 保存报告
+        $summary | Out-File -FilePath "translation-report.md" -Encoding UTF8
+        Get-Content "translation-report.md"  # 打印报告
 
-    - name: Upload translation summary
+    - name: 上传构建报告
       uses: actions/upload-artifact@v4
       with:
-        name: translation-summary
-        path: translation-summary.md
+        name: translation-report
+        path: translation-report.md
         if-no-files-found: warn
 
   create-release:
     runs-on: ubuntu-latest
     needs: [build-windows, build-linux, build-macos, build-translations]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'  # PR不生成Release
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
   
-    - name: Download all artifacts
+    - name: 下载所有构建产物
       uses: actions/download-artifact@v4
       with:
-        path: artifacts
-  
-    - name: Prepare release assets
+        path: artifacts  # 所有Artifact下载到artifacts/目录
+
+    - name: 整理Release资产
       run: |
-        mkdir -p release_assets
+        mkdir -p release_assets  # 最终Release文件目录
         
+        # 1. 整理各平台工具
         cp artifacts/dbipatcher-windows/dbipatcher.exe release_assets/dbipatcher-windows-${{ github.ref_name }}.exe
         cp artifacts/dbipatcher-windows/libzstd.dll release_assets/libzstd.dll
         cp artifacts/dbipatcher-linux/dbipatcher release_assets/dbipatcher-linux-${{ github.ref_name }}
+        chmod +x release_assets/dbipatcher-linux-${{ github.ref_name }}  # 加执行权限
         cp artifacts/dbipatcher-macos/dbipatcher release_assets/dbipatcher-macos-${{ github.ref_name }}
+        chmod +x release_assets/dbipatcher-macos-${{ github.ref_name }}
         
         if [ -d "artifacts/dbi-translated-versions" ]; then
           mkdir -p release_assets/translations
           cp -r artifacts/dbi-translated-versions/* release_assets/translations/
-          echo "Included translated versions:"
-          ls -la release_assets/translations/
+          zip -r release_assets/dbi-translations-${{ github.ref_name }}.zip release_assets/translations/
+          rm -rf release_assets/translations 
         fi
         
-        if [ -f "artifacts/translation-summary/translation-summary.md" ]; then
-          cp artifacts/translation-summary/translation-summary.md release_assets/
+        if [ -f "artifacts/translation-report/translation-report.md" ]; then
+          cp artifacts/translation-report/translation-report.md release_assets/
         fi
         
-        echo "Final release assets:"
+        echo "=== 最终Release资产 ==="
         ls -la release_assets/
-        if [ -d "release_assets/translations" ]; then
-          ls -la release_assets/translations/
-        fi
 
-    - name: Create Release
+    - name: 创建GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
         name: DBI Patcher ${{ github.ref_name }}
         body: |
-          Automated build of DBI Patcher ${{ github.ref_name }}
+          ## DBI Patcher 自动构建发布
           
-          **Includes translated DBI versions for multiple languages**
+          ### 包含内容
+          - 各平台工具（Windows/Linux/macOS）
+          - 多语言翻译包（已压缩）
+          - 构建报告
           
-          **Platforms:**
-          - Windows (x86_64)
-          - Linux (x86_64) 
-          - macOS (x86_64)
+          ### 使用说明
+          1. 下载对应平台的工具（如Windows用户下载 dbipatcher-windows-${{ github.ref_name }}.exe）
+          2. 下载翻译包（dbi-translations-${{ github.ref_name }}.zip）
+          3. 运行工具：`./dbipatcher --help` 查看命令
           
-          **Usage:**
-          ```bash
-          # Main tool
-          ./dbipatcher --help
-          
-          # To build translations (requires original DBI.810.ru.nro):
-          ./dbipatcher --extract dbi/DBI.810.ru.nro --output temp/DBI_810
-          ./dbipatcher --convert temp/DBI_810/rec6.bin --output translate/rec6.810.ru.txt
-          ./dbipatcher --convert translate/rec6.810.[lang].txt --output temp/DBI_810/rec6.[lang].bin
-          ./dbipatcher --patch temp/DBI_810/rec6.[lang].bin --binary dbi/DBI.810.ru.nro --output DBI.810.[lang].nro
-          ```
+          ### 翻译支持语言
+          自动构建所有配置的语言（详见 translation-report.md）
         draft: false
         prerelease: false
         files: |
-          release_assets/*
+          release_assets/*  # 上传所有整理好的资产
