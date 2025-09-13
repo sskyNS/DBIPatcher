@@ -21,7 +21,7 @@ LANG_ENGB=英式英语
 LANG_JA=日语
 LANG_FR=法语
 LANG_DE=德语
-LANG_ES419=拉丁美洲西班牙语
+LANG_ES419=西班牙语
 LANG_ES=西班牙语
 LANG_IT=意大利语
 LANG_NL=荷兰语
@@ -80,7 +80,7 @@ CV034=浏览票据
 CV035=浏览存档
 CV036=运行MTP服务器
 CV037=运行FTP服务器
-CV038=已安装游戏
+CV038=已安装的游戏
 CV039================
 CV040=显示LFS文件夹大小（慢）
 CV041=安装选项
