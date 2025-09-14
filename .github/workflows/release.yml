@@ -3,16 +3,7 @@ name: Release DBI Patcher
 on:
   push:
     tags:
-      - 'v*'  
-    paths:
-      - 'translate/**.txt'
-      - 'DBIPatcher/translate/**.txt'
-      - 'dbi_translation_builder.py'  
-  pull_request:
-    paths:
-      - 'translate/**.txt'
-      - 'DBIPatcher/translate/**.txt'
-      - 'dbi_translation_builder.py'
+      - 'v*'
 
 permissions:
   contents: write
@@ -26,20 +17,72 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install MinGW and make
+    - name: Install MinGW and verify tools
       run: |
-        choco install mingw make -y
+        choco install mingw -y
         echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
-        echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
         gcc --version
         make --version
+        
+    - name: Verify source files and directory structure
+      run: |
+        Write-Host "Checking source directory structure:"
+        Get-ChildItem -Path . -Recurse -Directory | Where-Object { $_.Name -eq "src" } | ForEach-Object { 
+            Write-Host "Found src directory at: $($_.FullName)"
+            Get-ChildItem -Path $_.FullName -Recurse -File
+        }
+        
+        if (Test-Path "src\*.c") {
+            Write-Host "C source files found in src/:"
+            Get-ChildItem -Path "src" -Filter "*.c"
+        } else {
+            Write-Host "No C source files found in src/"
+        }
+        
+        if (Test-Path "src\inc\*.h") {
+            Write-Host "Header files found in src/inc/:"
+            Get-ChildItem -Path "src\inc" -Filter "*.h"
+        } else {
+            Write-Host "No header files found in src/inc/"
+        }
+
+    - name: Verify pre-built zstd DLL
+      run: |
+        if (Test-Path "libs/zstd/dll/libzstd.dll") { 
+            Write-Host "Pre-built libzstd.dll found" 
+            Get-Item "libs/zstd/dll/libzstd.dll"
+        } else { 
+            Write-Host "Error: Pre-built libzstd.dll not found" 
+            Write-Host "Available files in libs/zstd/dll/:"
+            if (Test-Path "libs/zstd/dll") {
+                Get-ChildItem -Path "libs/zstd/dll"
+            }
+            exit 1 
+        }
 
     - name: Build for Windows
       run: |
         make clean
         make -j4
 
-    - name: Upload Windows executable
+    - name: Verify build output
+      run: |
+        if (Test-Path "bin/dbipatcher.exe") { 
+            Write-Host "Build successful: dbipatcher.exe found" 
+            Get-Item "bin/dbipatcher.exe"
+            if (Test-Path "bin/libzstd.dll") { 
+                Write-Host "libzstd.dll copied to bin directory" 
+            }
+        } else { 
+            Write-Host "Build failed: dbipatcher.exe not found" 
+            if (Test-Path "build") {
+                Write-Host "Build directory contents:"
+                Get-ChildItem -Path "build" -Recurse
+            }
+            exit 1 
+        }
+
+    - name: Upload Windows artifact
       uses: actions/upload-artifact@v4
       with:
         name: dbipatcher-windows
@@ -66,7 +109,7 @@ jobs:
         make clean
         make -j4
 
-    - name: Upload Linux executable
+    - name: Upload Linux artifact
       uses: actions/upload-artifact@v4
       with:
         name: dbipatcher-linux
@@ -92,187 +135,64 @@ jobs:
         make clean
         make -j4
 
-    - name: Upload macOS executable
+    - name: Upload macOS artifact
       uses: actions/upload-artifact@v4
       with:
         name: dbipatcher-macos
         path: bin/dbipatcher
         if-no-files-found: error
 
-  build-translations:
-    runs-on: windows-latest
-    needs: [build-windows]  
-    if: contains(github.event.head_commit.message, 'translate') || contains(github.event.head_commit.message, 'translation') || github.event_name == 'push'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Download Windows executable
-      uses: actions/download-artifact@v4
-      with:
-        name: dbipatcher-windows
-        path: bin/
-
-    - name: Install Python (for script dependency)
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'  
-
-    - name: Install make and tools
-      run: |
-        choco install make -y
-        echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
-        make --version  
-
-    - name: Check base DBI file (must exist for build)
-      run: |
-        echo "Checking base DBI file: dbi/DBI.810.ru.nro"
-        if (-not (Test-Path "dbi/DBI.810.ru.nro")) {
-            echo "ERROR: Base file dbi/DBI.810.ru.nro does not exist!"
-            echo "Please place the original DBI file in the dbi/ directory and try again."
-            exit 1
-        } else {
-            $fileSize = [math]::Round((Get-Item 'dbi/DBI.810.ru.nro').Length/1MB, 2)
-            echo "✓ Found base file (size: $fileSize MB)"
-        }
-
-    - name: Run Python script (build all languages automatically)
-      run: |
-        python dbi_translation_builder.py --build-all
-      env:
-        PATH: ${{ env.PATH }};C:\ProgramData\chocolatey\bin;C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
-
-    - name: Verify translation file generation
-      run: |
-        $outputDir = "temp/DBI_810/bin"
-        if (-not (Test-Path $outputDir)) {
-            echo "ERROR: Translation output directory $outputDir does not exist"
-            exit 1
-        }
-      
-        $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
-        if ($transFiles.Count -eq 0) {
-            echo "ERROR: No translation files were generated"
-            exit 1
-        }
-        echo "✓ Successfully generated $($transFiles.Count) translation files:"
-        foreach ($file in $transFiles) {
-            $fileSize = [math]::Round($file.Length/1KB, 2)
-            echo "  - $($file.Name) ($fileSize KB)"
-        }
-
-    - name: Upload translation artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dbi-translated-versions
-        path: temp/DBI_810/bin/
-        if-no-files-found: error
-
-    - name: Generate translation build report
-      run: |
-        $summary = "## DBI Translation Build Report`n`n"
-        $summary += "**Build Time:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`n"
-        $summary += "**Commit Hash:** $env:GITHUB_SHA`n"
-        $summary += "**Tag:** $($env:GITHUB_REF -replace 'refs/tags/','')`n`n"
-        
-        $outputDir = "temp/DBI_810/bin"
-        $transFiles = Get-ChildItem -Path $outputDir -Filter "DBI.810.*.nro" -Recurse
-        $summary += "### Generated Translation Files (Total: $($transFiles.Count))`n"
-        foreach ($file in $transFiles) {
-            $fileSize = [math]::Round($file.Length/1KB, 2)
-            $summary += "- $($file.Name) ($fileSize KB)`n"
-        }
-        
-        # Save report
-        $summary | Out-File -FilePath "translation-report.md" -Encoding UTF8
-        Get-Content "translation-report.md"
-
-    - name: Upload build report
-      uses: actions/upload-artifact@v4
-      with:
-        name: translation-report
-        path: translation-report.md
-        if-no-files-found: warn
-
   create-release:
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux, build-macos, build-translations]
-    if: github.event_name != 'pull_request'
-    
+    needs: [build-windows, build-linux, build-macos]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
   
-    - name: Download all build artifacts
+    - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
-
+  
+    - name: List downloaded files
+      run: |
+        find artifacts -type f | sort
+  
     - name: Prepare release assets
       run: |
         mkdir -p release_assets
-        
-        # 1. Organize platform tools
         cp artifacts/dbipatcher-windows/dbipatcher.exe release_assets/dbipatcher-windows-${{ github.ref_name }}.exe
-        cp artifacts/dbipatcher-windows/libzstd.dll release_assets/libzstd.dll
         cp artifacts/dbipatcher-linux/dbipatcher release_assets/dbipatcher-linux-${{ github.ref_name }}
-        chmod +x release_assets/dbipatcher-linux-${{ github.ref_name }}
         cp artifacts/dbipatcher-macos/dbipatcher release_assets/dbipatcher-macos-${{ github.ref_name }}
-        chmod +x release_assets/dbipatcher-macos-${{ github.ref_name }}
-        
-        if [ -d "artifacts/dbi-translated-versions" ]; then
-          mkdir -p release_assets/translations
-          cp -r artifacts/dbi-translated-versions/* release_assets/translations/
-          zip -r release_assets/dbi-translations-${{ github.ref_name }}.zip release_assets/translations/
-          rm -rf release_assets/translations 
-        fi
-        
-        if [ -f "artifacts/translation-report/translation-report.md" ]; then
-          cp artifacts/translation-report/translation-report.md release_assets/
-        fi
-        
-        echo "=== Final Release Assets ==="
         ls -la release_assets/
-
-    - name: Create GitHub Release
+  
+    - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
         name: DBI Patcher ${{ github.ref_name }}
         body: |
-          ## DBI Patcher Automated Build Release
+          Automated build of DBI Patcher ${{ github.ref_name }}
+  
+          **Platforms included:**
+          - Windows (x86_64)
+          - Linux (x86_64)
+          - macOS (x86_64)
+  
+          **Usage:**
+          ```bash
+          # Linux
+          chmod +x dbipatcher-linux-${{ github.ref_name }}
+          ./dbipatcher-linux-${{ github.ref_name }} --help
           
-          ### Included Content
-          - Platform tools (Windows/Linux/macOS)
-          - Multi-language translation packages (compressed)
-          - Build report
-          
-          ### Usage Instructions
-          1. Download the tool for your platform (e.g., Windows users download dbipatcher-windows-${{ github.ref_name }}.exe)
-          2. Download translation package (dbi-translations-${{ github.ref_name }}.zip)
-          3. Run the tool: `./dbipatcher --help` to view commands
-          
-          ### Supported Translation Languages
-          Automatically built for all configured languages (see translation-report.md for details)
-          
-          ### Build Information
-          - **Build Date:** ${{ github.event.repository.updated_at }}
-          - **Commit:** ${{ github.sha }}
-          - **Tag:** ${{ github.ref_name }}
-          
-          ### Notes
-          - Translation builds require the original DBI.810.ru.nro file
-          - Make sure to download libzstd.dll for Windows version
-          - Linux/macOS versions require execution permissions: `chmod +x dbipatcher-*`
+          # macOS
+          chmod +x dbipatcher-macos-${{ github.ref_name }}
+          ./dbipatcher-macos-${{ github.ref_name }} --help
+  
+          # Windows
+          dbipatcher-windows-${{ github.ref_name }}.exe --help
+          ```
         draft: false
         prerelease: false
         files: |
-          release_assets/dbipatcher-windows-${{ github.ref_name }}.exe
-          release_assets/libzstd.dll
-          release_assets/dbipatcher-linux-${{ github.ref_name }}
-          release_assets/dbipatcher-macos-${{ github.ref_name }}
-          release_assets/dbi-translations-${{ github.ref_name }}.zip
-          release_assets/translation-report.md
+          release_assets/*
