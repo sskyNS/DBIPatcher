@@ -7,7 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/sskyNS/DBIPatcher)](https://github.com/sskyNS/DBIPatcher/stargazers)
 
 # DBI Multilingual version Translation
-![2025083113480600-DB1426D1DFD034027CECDE9C2DD914B8](https://github.com/user-attachments/assets/8180edf0-c2eb-4573-b449-0f86138f5065)
+![2025091619080300-DB1426D1DFD034027CECDE9C2DD914B8](https://github.com/user-attachments/assets/a4209dda-5424-49fd-95a7-e26486e10500)
 ![2025083115152500-DB1426D1DFD034027CECDE9C2DD914B8](https://github.com/user-attachments/assets/36725a1d-8a40-4a8c-919d-62972dbccfb0)
 
 This repository contains Multilingual translation version for the DBI homebrew application (version 810) for Nintendo Switch.
