@@ -26,7 +26,7 @@ typedef enum {
     LOG_ERROR,
 } LogLevel;
 
-void log_init(const char * file);
+void log_init(const char * app);
 
 void log_close(void);
 
@@ -35,9 +35,11 @@ void log_close(void);
 #define lf_i(fmt,...) lf_s(LOG_INFO, (fmt), ##__VA_ARGS__)
 #define lf_n(fmt,...) lf_s(LOG_NOTICE, (fmt), ##__VA_ARGS__)
 #define lf_w(fmt,...) lf_s(LOG_WARNING, (fmt), ##__VA_ARGS__)
-#define lf_e(fmt,...) lf_s(LOG_ERROR, (fmt), ##__VA_ARGS__)
+//#define lf_e(fmt,...) lf_s(LOG_ERROR, (fmt), ##__VA_ARGS__)
 
 void __attribute__ ((format (printf, 2, 3))) lf_s(LogLevel level, const char * fmt, ...);
+
+void lf_e(const char * fmt, ...);
 
 #endif /* LOG_H */
 

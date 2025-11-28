@@ -11,15 +11,15 @@
 #include <stdarg.h>
 
 #include "log.h"
+#include "utils.h"
 
 #define ESC             "\x1B"
 #define LOG_SUFFIX      ESC "[0m"
-#define LOG_BUFFER      1024
+#define LOG_BUFFER      4096
 
-#define LF_FILE         0x01
-#define LF_CLI          0x02
+#define LF_CLI          0x01
 
-static FILE * log_file = NULL;
+static const char * app_name = NULL;
 
 static const char * log_get_prefix(LogLevel lvl) {
     switch(lvl) {
@@ -61,26 +61,26 @@ static const char * log_get_time(void) {
 
 static void log_write(uint8_t flags, const char * str) {    
     if(flags & LF_CLI) {
-        printf("%s", str);
-    }
-    
-    if(flags & LF_FILE) {
-        if(log_file) {
-            fwrite(str, 1 , strlen(str), log_file);
-        }
+        fprintf(stdout, "%s", str);
     }
 }
 
-void log_init(const char * file) {
-    log_file = fopen(file, "a+");
+void lf_e(const char * fmt, ...) {
+    char tmp[LOG_BUFFER];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(tmp, sizeof(tmp), fmt, args);
+    va_end(args);
+    
+    fprintf(stderr, "%s: %s%s%s" CRLF, app_name, log_get_prefix(LOG_ERROR), tmp, LOG_SUFFIX);
+}
+
+void log_init(const char * app) {
+    app_name = app;
 }
 
 void log_close(void) {
-    if(log_file) {
-        fflush(log_file);
-        fclose(log_file);
-        log_file = NULL;
-    }
+    
 }
 
 void lf_s(LogLevel lvl, const char * fmt, ...) {
@@ -88,19 +88,17 @@ void lf_s(LogLevel lvl, const char * fmt, ...) {
     va_list args;
     va_start(args, fmt);
     
+    log_write(LF_CLI, app_name);
+    log_write(LF_CLI, ": ");
+    
     log_write(LF_CLI, log_get_prefix(lvl));
-    log_write(LF_CLI | LF_FILE, log_get_time());
-    
-    snprintf(tmp, sizeof(tmp), " [%c] ", log_get_level(lvl)[0]);
-    
-    log_write(LF_CLI | LF_FILE, tmp);
     
     vsnprintf(tmp, sizeof(tmp), fmt, args);
     
-    log_write(LF_CLI | LF_FILE, tmp);
+    log_write(LF_CLI, tmp);
     
     log_write(LF_CLI, LOG_SUFFIX);
-    log_write(LF_CLI | LF_FILE, CRLF);
+    log_write(LF_CLI, CRLF);
     
     va_end(args);
 }

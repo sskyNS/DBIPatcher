@@ -1,25 +1,34 @@
 # DBI English Translation
 
-This repository contains an English translation for the DBI homebrew application (version 810) for Nintendo Switch.
+This repository contains second iteration of an English translation for the DBI homebrew application (version 814-845) 
+for Nintendo Switch.
 
-Was updating my Switch installation and wanted to bump DBI version from original 500-something. So, fired up Ghidra, 
-investigated suspicious chunk of referenced memory and sure enough, there was naive xor cipher on compressed strings.
+After initial release Duckbill got rid of translation payload and instead opted for compile time string obfuscation,
+using the mighty XOR encryption again.
 
-With cyrillic obviously being inferior to latin alphabet (:D) and taking mostly two bytes per character, there was no 
-issue in fiting english texts to available space.
+This time, I really don't see myself updating this in the forseeable future. Because of that, I wanted to wait a bit 
+longer before release, however version 846 changed (probably unintentionaly, as a side effect of refactoring) key
+generator and updating current toolkit to support that would take more time than I am willing to invest.
 
-I do not intend to maintain this repo and play cat-and-mouse games with DBI author. Original version was working fine 
-for years, so hopefuly there will be at least one similiary stable version released to this point. Would be of course
-cool if he stopped playing princess and released multilanguage version, yet I dont expect that.
+For this reason I am releasing my work in its current state, which should come in handy, as it brings (at least 
+preliminary) oficial HOS 21 support.
 
-Also, I guess we will finally see for sure if there is any console bricking code and if he wants to exercise it.
-
-Everything should be hopefuly clear from code. AI-generated generic readme follows.
+Everything should be hopefuly clear from code, which is (again) a mess, but should work.
 
 ## Important Disclaimers
 
 ### Author Controversy
 This translation is provided independently and is not affiliated with or endorsed by the original DBI author. Users should be aware of ongoing community discussions regarding the original software and make informed decisions about its use.
+
+**Do not forget about the warnings and threats from the author of the Russian version, and use these translations at your own risk:**
+
+#### Author Warning on Independent Translations
+
+> *04 Jul 2023*
+> 
+> **Nobody:** Why do you keep scaring people who use independent translations? Some poor Brazilians on Telegram even went full panik!
+> 
+> **Duckbill:** I like boys.
 
 ### Backup Your Console
 **Before using any homebrew software, create a complete backup of your console:**
@@ -32,71 +41,90 @@ Store these backups in multiple secure locations. Console bricks can and do happ
 ### No Warranties
 This translation is provided as-is with no guarantees whatsoever. The author of this translation accepts no responsibility for any damage, data loss, console bricks, account bans, or other issues that may arise from using this modified software. Use at your own risk.
 
-### Potential Countermeasures
-The original author may implement measures in future DBI releases to detect or prevent these translations from functioning. This repository may become obsolete without warning.
-
 ### Maintenance Notice
-This repository is not actively maintained. Future DBI updates will likely break compatibility, and no fixes are planned. The community is free to fork, modify, and distribute this work as needed.
+This repository is not actively maintained. No future updates are currently planned. The community is free to fork, modify, and distribute this work as needed.
 
 ## Technical Notes
 
-### Testing Status
-This translation has received limited testing beyond basic functionality:
-- SD card browsing
-- Application installation via MTP
+I have included all relevant files I used for translation (nros, blueprints), HOWEVER: there is *slight* 
+chance I migth have unintentionaly broken some of them. If in doubt, source your own.
 
-Simply just clicked through menus and everything seemed to be reasonably working. No immediate console combustion.
+Also might have unintentionaly broken something during cleanup - however version 845 was translated using final
+version of this toolkit and seems to work fine.
+
+This works on my xubuntu machine. Probably wont work on windows.
+
+### Supported versions
+This project supports all russian DBI versions after removal of translation blob (that would probably be &gt; 810).
+Last supported version is 845. Support for further versions could be theoreticaly added, unless there will be
+countermeasures taken after this going public.
+
+### Testing status
+Some of the versions were tested by few selected people, who were regularly using them without any issues. **Big thanks to everyone involved!**
+
+Other versions were just casualy tested for obvious issues.
 
 ### Translation Method
-The translation was generated primarily through automated tools (Perplexity AI) with manual corrections (because I dont speak Russian, obviously). 
-Some translations may be imprecise or contextually incorrect. Just linked the english/russian readmes for context.
+Known strings from version 810 were used as basis for translation.
+
+Strings are compile-time xor obfuscated.
+
+It basically boils down to compiler optimising strings to one of the following types:
+
+1. **>= 16B** - full strings stored in read only section, null terminated, 8 byte aligned
+2. **> 8B and < 16B** - first 8 bytes stored in read only section, rest are instruction immediate values
+3. **<= 8B** - instruction immediates only
+
+Where only real issue are **2** and **3**, requiring instruction parsing. This currently appears to work well, however it
+is still best to avoid using immediates where possible (prefer shorter strings).
+
+String lookup takes some time, so application uses something I called **blueprints**, which contain locations to be 
+patched as well as string ids going into those positions.
 
 ### Code Quality
-This is experimental software built on previous vibe-coded python porn. The codebase is functional but not production-ready.
+This is experimental software. Code smells. But it works. :)
 
-### String Placeholder Matching
-When modifying translations, ensure string placeholders match between original and translated files. Use the `--keys` parameter 
-and diff the resulting files to identify critical changes that could break functionality. This is just basic test, best
-would be of course manualy checking all strings.
 
 ## Usage
 
-### Quick Start (Version 810)
+### Quick Start
 ```bash
 git clone <repository-url>
 cd <repository-directory>
-make translate-810
+make
 ```
 
 ### Manual Usage
-The `dbipatcher` utility provides several operations:
+List of supported operations can be displayed using:
 
 ```
-Usage: ./bin/dbipatcher [OPTIONS]
-
-Options:
-  -b, --binary FILE      Input binary file to patch
-  -p, --patch FILE       Patch file to apply
-  -o, --output FILE      Output file or directory
-  -k, --keys FILE        Output file or directory
-  -s, --slot NUMBER      Slot index for patch application
-  -e, --extract FILE     Extract payloads from a DBI binary
-  -c, --convert FILE     Convert payload or translation file
-  -h, --help             Display this help message
-
-Examples:
-  # Extract payloads from DBI.nro into folder DBI_extract
-     ./bin/dbipatcher --extract DBI.nro --output DBI_extract
-
-  # Convert extracted payload 6.bin into an editable text file
-     ./bin/dbipatcher --convert DBI_extract/6.bin --output translation.txt --keys keylist.txt
-
-  # Convert edited translations back into binary form
-     ./bin/dbipatcher --convert translation.txt --output DBI_extract/6.bin --keys keylist.txt
-
-  # Apply patch 6.bin to DBI.nro at slot 6 and write patched binary
-     ./bin/dbipatcher --patch 6.bin --binary DBI.nro --slot 6 --output DBI.patched.nro
+Usage: ./bin/dbipatcher --help
 ```
+
+There is quick description of individual operations:
+
+| Operation       | Description                                                                   |
+|-----------------|-------------------------------------------------------------------------------|
+| **--find-imm**  | Searches instruction immediates for needle                                    |
+| **--find-str**  | Searches read only data for needle                                            |
+| **--find-keys** | Searches for XOR key candidates                                               |
+| **--new-en**    | Searches for english string candidates not present in dictionary              |
+| **--new-ru**    | Searches for russian string candidates not present in dictionary              |
+| **--partials**  | Searches for instruction immediate portion of type 2 strings from disctionary |
+| **--decode**    | Tries to decode string starting at given address                              |
+| **--merge**     | Merges existing language file with dictionary. Performs various checks.       |
+| **--scan**      | Used to create blueprints                                                     |
+| **--patch**     | Patches nro using language file and blueprint                                 |
+
+Real workflow for patching theoretical new version is:
+
+1. Find missing strings using **--new-en** and **--new-ru**, manualy add those to dictionary
+2. If some of those appear to be of type 2, use **--partials** to find possible candidates, manualy update disctionary
+3. **--merge** your language file with updated dictionary, translate missing keys
+4. **--merge** your language file again, open in text editor and check for possible issues at its end
+5. Create blueprint using **--scan** - you might want to check some of the locations in ghidra to verify they were correctly detected
+6. **--patch** russian nro into english
+7. Test patched file. if there are still some russian strings present, use **--find-str** or **--find-imm* to locate them, add to dictionary and repeat
 
 ## Legal Notice
 

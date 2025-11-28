@@ -15,6 +15,8 @@
 
 #include <stdlib.h>
 
+#define ARRLEN(arr)     (sizeof(arr)/sizeof(*arr))
+
 int mkpath(mode_t mode, const char* fmt, ...);
 
 #endif /* UTILS_H */
