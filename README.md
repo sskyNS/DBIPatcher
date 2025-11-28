@@ -1,4 +1,4 @@
-# DBI English Translation
+# DBI Translation
 
 This repository contains second iteration of an English translation for the DBI homebrew application (version 814-845) 
 for Nintendo Switch.
