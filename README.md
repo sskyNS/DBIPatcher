@@ -1,6 +1,6 @@
 # DBI Translation
 
-This repository contains second iteration of an English translation for the DBI homebrew application (version 814-845) 
+This repository contains second iteration of all language translation for the DBI homebrew application (version 814-845) 
 for Nintendo Switch.
 
 After initial release Duckbill got rid of translation payload and instead opted for compile time string obfuscation,
