@@ -2,67 +2,71 @@
 # -*- coding: utf-8 -*-
 
 """
-多语言版本DBI.nro自动构建脚本
-此脚本会自动扫描所有语言文件、NRO文件和blueprint文件，并为每个匹配的版本组合生成对应的语言版本NRO文件。
+DBI.nro Multi-language Auto-Build Script
+This script automatically scans all language files, NRO files, and blueprint files,
+and generates corresponding language version NRO files for each matching version combination.
 """
 
 import os
 import sys
 import re
 import subprocess
+import argparse
 from pathlib import Path
 
-# 这里的打印语句已经移到脚本顶部
+# Printing statements have been moved to the top of the script
 
-# 确定项目根目录 - 增强路径处理以支持exe模式
+# Determine project root directory - enhanced path handling for exe mode
 if getattr(sys, 'frozen', False):
-    # 当被打包成exe时
+    # When packaged as exe
     exe_dir = Path(os.path.dirname(sys.executable))
-    # 尝试多种可能的位置寻找项目根目录
+    # Try multiple possible locations to find project root
     possible_roots = [
-        exe_dir,  # exe所在目录
-        exe_dir.parent,  # exe的父目录
-        Path(os.getcwd())  # 当前工作目录
+        exe_dir,  # exe directory
+        exe_dir.parent,  # parent directory of exe
+        Path(os.getcwd())  # current working directory
     ]
     
-    # 查找包含必要目录结构的根目录
+    # Find root directory containing necessary directory structure
     PROJECT_ROOT = None
     for root in possible_roots:
         if (root / "dbi").exists() and (root / "translate").exists() and (root / "bin").exists():
             PROJECT_ROOT = root
             break
     
-    # 如果没找到，使用exe所在目录作为默认
+    # If not found, use exe directory as default
     if PROJECT_ROOT is None:
         PROJECT_ROOT = exe_dir
-        print(f"警告: 未找到完整的项目结构，使用默认路径: {PROJECT_ROOT}")
+        print(f"Warning: Complete project structure not found, using default path: {PROJECT_ROOT}")
 else:
-    # 正常Python脚本模式
+    # Normal Python script mode
     PROJECT_ROOT = Path(__file__).parent
 
-print(f"项目根目录: {PROJECT_ROOT}")
+print(f"Project root directory: {PROJECT_ROOT}")
 
-# 定义各目录路径
+# Define directory paths
 DBI_DIR = PROJECT_ROOT / "dbi"
 TRANSLATE_DIR = PROJECT_ROOT / "translate"
 BLUEPRINTS_DIR = TRANSLATE_DIR / "blueprints"
 BIN_DIR = PROJECT_ROOT / "bin"
+OUTPUT_DIR = PROJECT_ROOT / "output"  # Output directory for generated files
 
-# 根据操作系统确定dbipatcher可执行文件名
+# Determine dbipatcher executable name based on operating system
 if sys.platform.startswith('win'):
     DBIPATCHER_EXE = BIN_DIR / "dbipatcher.exe"
 else:
     DBIPATCHER_EXE = BIN_DIR / "dbipatcher"
 
-# 确保路径是字符串格式（兼容Windows）
+# Ensure paths are in string format (compatible with Windows)
 DBIPATCHER_EXE = str(DBIPATCHER_EXE)
 DBI_DIR = str(DBI_DIR)
 BLUEPRINTS_DIR = str(BLUEPRINTS_DIR)
 TRANSLATE_DIR = str(TRANSLATE_DIR)
+OUTPUT_DIR = str(OUTPUT_DIR)  # Add output directory to string conversion
 
-# 检查dbipatcher工具是否存在
+# Check if dbipatcher tool exists
 if not os.path.exists(DBIPATCHER_EXE):
-    # 尝试其他可能的位置
+    # Try other possible locations
     alternative_paths = [
         os.path.join(os.getcwd(), "bin", "dbipatcher.exe"),
         os.path.join(os.getcwd(), "dbipatcher.exe")
@@ -73,20 +77,20 @@ if not os.path.exists(DBIPATCHER_EXE):
         if os.path.exists(alt_path):
             DBIPATCHER_EXE = alt_path
             found = True
-            print(f"在备用位置找到dbipatcher: {DBIPATCHER_EXE}")
+            print(f"Found dbipatcher in alternative location: {DBIPATCHER_EXE}")
             break
     
     if not found:
-        print(f"错误: 找不到dbipatcher工具: {DBIPATCHER_EXE}")
-        print("请确保dbipatcher.exe位于bin目录中，或者将此程序放在正确的项目目录中运行")
-        print("或者您可以将dbipatcher.exe复制到当前工作目录")
+        print(f"Error: Cannot find dbipatcher tool: {DBIPATCHER_EXE}")
+        print("Please ensure dbipatcher.exe is in the bin directory, or run this program in the correct project directory")
+        print("Or you can copy dbipatcher.exe to the current working directory")
         sys.exit(1)
 
 
 def extract_version(filename):
     """
-    从文件名中提取版本号
-    例如从 "DBI.845.ru.nro" 或 "blueprint.845.txt" 中提取 "845"
+    Extract version number from filename
+    For example, extract "845" from "DBI.845.ru.nro" or "blueprint.845.txt"
     """
     match = re.search(r'\.([0-9]+)\.', filename)
     if match:
@@ -96,8 +100,8 @@ def extract_version(filename):
 
 def extract_language(filename):
     """
-    从语言文件名中提取语言代码
-    例如从 "lang.es.txt" 中提取 "es"
+    Extract language code from language filename
+    For example, extract "es" from "lang.es.txt"
     """
     match = re.search(r'lang\.([a-z]+(?:-[a-z]+)?)\.txt', filename)
     if match:
@@ -107,8 +111,8 @@ def extract_language(filename):
 
 def get_russian_nros():
     """
-    获取所有俄语NRO文件，并按版本号分组
-    返回字典: {"版本号": "文件路径"}
+    Get all Russian NRO files and group them by version number
+    Returns dictionary: {"version": "file_path"}
     """
     nro_files = {}
     try:
@@ -124,8 +128,8 @@ def get_russian_nros():
 
 def get_blueprints():
     """
-    获取所有blueprint文件，并按版本号分组
-    返回字典: {"版本号": "文件路径"}
+    Get all blueprint files and group them by version number
+    Returns dictionary: {"version": "file_path"}
     """
     blueprint_files = {}
     try:
@@ -141,8 +145,8 @@ def get_blueprints():
 
 def get_language_files():
     """
-    获取所有语言文件
-    返回字典: {"语言代码": "文件路径"}
+    Get all language files
+    Returns dictionary: {"language_code": "file_path"}
     """
     lang_files = {}
     try:
@@ -158,7 +162,7 @@ def get_language_files():
 
 def run_dbipatcher(blueprint_path, nro_path, lang_path, output_path):
     """
-    运行dbipatcher工具生成目标语言版本的NRO文件
+    Run dbipatcher tool to generate the target language version NRO file
     """
     try:
         # 构建命令行
@@ -203,38 +207,67 @@ def run_dbipatcher(blueprint_path, nro_path, lang_path, output_path):
 
 def main():
     """
-    主函数
+    Main function
     """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='DBI Multi-language Auto-Build Script')
+    parser.add_argument('--version', '-v', help='Filter specific DBI version (e.g., "845")')
+    parser.add_argument('--language', '-l', help='Filter specific language code (e.g., "en", "zhcn")')
+    args = parser.parse_args()
+    
     print("=" * 60)
-    print("DBI多语言版本自动构建脚本")
+    print("DBI Multi-language Auto-Build Script")
     print("=" * 60)
     
-    # 检查dbipatcher工具是否存在
+    # Create output directory if it doesn't exist
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    print(f"Output directory: {OUTPUT_DIR}")
+    
+    # Check if dbipatcher tool exists
     if not os.path.exists(DBIPATCHER_EXE):
-        print(f"错误: 找不到dbipatcher工具: {DBIPATCHER_EXE}")
-        print("请先运行 'make' 命令编译项目")
+        print(f"Error: dbipatcher tool not found: {DBIPATCHER_EXE}")
+        print("Please run 'make' command to compile the project first")
         return 1
     
-    # 获取所有文件
-    print("\n正在扫描文件...")
+    # Get all files
+    print("\nScanning files...")
     russian_nros = get_russian_nros()
     blueprints = get_blueprints()
     language_files = get_language_files()
     
-    print(f"找到 {len(russian_nros)} 个俄语NRO文件")
-    print(f"找到 {len(blueprints)} 个blueprint文件")
-    print(f"找到 {len(language_files)} 个语言文件: {', '.join(language_files.keys())}")
+    print(f"Found {len(russian_nros)} Russian NRO files")
+    print(f"Found {len(blueprints)} blueprint files")
+    print(f"Found {len(language_files)} language files: {', '.join(language_files.keys())}")
     
-    # 找出匹配的版本
+    # Find matching versions
     common_versions = set(russian_nros.keys()) & set(blueprints.keys())
     if not common_versions:
-        print("错误: 没有找到匹配的NRO和blueprint版本")
+        print("Error: No matching NRO and blueprint versions found")
         return 1
     
-    print(f"找到 {len(common_versions)} 个匹配的版本: {', '.join(sorted(common_versions))}")
+    print(f"Found {len(common_versions)} matching versions: {', '.join(sorted(common_versions))}")
     
-    # 开始构建
-    print("\n开始构建多语言版本...")
+    # Apply version filter if specified
+    if args.version:
+        filtered_versions = [v for v in common_versions if v == args.version]
+        if not filtered_versions:
+            print(f"Warning: Version {args.version} not found in matching versions")
+            return 1
+        common_versions = filtered_versions
+        print(f"Filtered to version: {args.version}")
+    
+    # Apply language filter if specified
+    if args.language:
+        if args.language in language_files:
+            filtered_languages = {args.language: language_files[args.language]}
+            language_files = filtered_languages
+            print(f"Filtered to language: {args.language}")
+        else:
+            print(f"Warning: Language {args.language} not found in available languages")
+            return 1
+    
+    # Start building
+    print("\nStarting multi-language build...")
     print("-" * 60)
     
     total_builds = len(common_versions) * len(language_files)
@@ -242,22 +275,22 @@ def main():
     
     for version in sorted(common_versions):
         for lang_code, lang_path in language_files.items():
-            # 构建输出文件名
+            # Build output filename
             output_filename = f"DBI.{version}.{lang_code}.nro"
-            output_path = os.path.join(DBI_DIR, output_filename)
+            output_path = os.path.join(OUTPUT_DIR, output_filename)
             
             # 调用dbipatcher
             if run_dbipatcher(blueprints[version], russian_nros[version], lang_path, output_path):
                 successful_builds += 1
     
-    # 输出统计信息
+    # Output statistics
     print("\n" + "-" * 60)
-    print(f"构建完成: 成功 {successful_builds}/{total_builds}")
+    print(f"Build completed: {successful_builds}/{total_builds} successful")
     
     if successful_builds == total_builds:
-        print("✓ 所有构建都已成功完成！")
+        print("✓ All builds completed successfully!")
     else:
-        print("! 部分构建失败，请检查错误信息")
+        print("! Some builds failed, please check error messages")
     
     print("=" * 60)
     return 0 if successful_builds > 0 else 1
