@@ -10,7 +10,7 @@ CFLAGS =-std=gnu11 \
 	-Wno-sign-compare \
 	-Wno-unused-function
 
-LDLIBS =-lzstd
+# LDLIBS =-lzstd
 
 SRCDIR = src
 BUILDDIR = build

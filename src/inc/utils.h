@@ -14,6 +14,7 @@
 #define UTILS_H
 
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #define ARRLEN(arr)     (sizeof(arr)/sizeof(*arr))
 

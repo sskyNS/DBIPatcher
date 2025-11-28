@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <inttypes.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #include "log.h"
 #include "utils.h"
