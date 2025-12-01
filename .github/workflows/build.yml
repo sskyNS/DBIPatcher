@@ -19,9 +19,6 @@ jobs:
           - os: ubuntu-latest
             name: linux
             artifact_name: dbipatcher-linux
-          - os: windows-latest
-            name: windows
-            artifact_name: dbipatcher-windows
           - os: macos-latest
             name: macos
             artifact_name: dbipatcher-macos
@@ -47,25 +44,12 @@ jobs:
         # 如果需要 zstd 库，取消下面的注释
         # brew install zstd
 
-    - name: Build dbipatcher (Linux/macOS)
-      if: matrix.os != 'windows-latest'
+    - name: Build dbipatcher
       run: |
         make
         ls -la bin/
 
-    - name: Build dbipatcher (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        make
-        # 在 Windows 上检查生成的文件
-        dir bin\
-        # 如果生成了没有扩展名的文件，重命名为 .exe
-        if exist "bin\dbipatcher" (
-          move "bin\dbipatcher" "bin\dbipatcher.exe"
-        )
-
-    - name: Test build output (Linux/macOS)
-      if: matrix.os != 'windows-latest'
+    - name: Test build output
       run: |
         if [ -f "bin/dbipatcher" ]; then
           echo "Build successful - dbipatcher exists"
@@ -78,26 +62,11 @@ jobs:
           exit 1
         fi
 
-    - name: Test build output (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      run: |
-        if exist "bin\dbipatcher.exe" (
-          echo "Build successful - dbipatcher.exe exists"
-          bin\dbipatcher.exe --help || echo "Help command failed but build succeeded"
-        ) else (
-          echo "Error: dbipatcher.exe not found in bin\"
-          dir bin\
-          exit 1
-        )
-
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
-        path: |
-          bin/dbipatcher*
-          bin/*.exe
+        path: bin/dbipatcher*
         if-no-files-found: error
 
   build-all-nros:
