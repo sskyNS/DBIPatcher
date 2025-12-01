@@ -1,0 +1,170 @@
+name: Build DBI Patcher
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            artifact_name: dbipatcher-linux
+          - os: windows-latest
+            name: windows
+            artifact_name: dbipatcher-windows.exe
+          - os: macos-latest
+            name: macos
+            artifact_name: dbipatcher-macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+        # 如果需要 zstd 库，取消下面的注释
+        # sudo apt-get install -y libzstd-dev
+
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        # 如果需要 zstd 库，取消下面的注释
+        # brew install zstd
+
+    - name: Build dbipatcher
+      run: |
+        make
+        # 在 Windows 上需要特殊处理可执行文件扩展名
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          if [ -f "bin/dbipatcher" ]; then
+            mv bin/dbipatcher bin/dbipatcher.exe
+          fi
+        fi
+
+    - name: Test build output
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          if [ -f "bin/dbipatcher.exe" ]; then
+            echo "Build successful - dbipatcher.exe exists"
+            # 在 Windows 上尝试运行程序
+            ./bin/dbipatcher.exe --help || true
+          else
+            echo "Error: dbipatcher.exe not found"
+            ls -la bin/
+            exit 1
+          fi
+        else
+          if [ -f "bin/dbipatcher" ]; then
+            echo "Build successful - dbipatcher exists"
+            chmod +x bin/dbipatcher
+            # 测试程序是否能运行
+            ./bin/dbipatcher --help || true
+          else
+            echo "Error: dbipatcher not found"
+            ls -la bin/
+            exit 1
+          fi
+        fi
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: |
+          bin/dbipatcher*
+          !bin/*.o
+        if-no-files-found: error
+
+  build-all-nros:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Make dbipatcher executable
+      run: |
+        chmod +x dbipatcher-linux/dbipatcher
+        # 复制到 bin 目录供 Python 脚本使用
+        mkdir -p bin
+        cp dbipatcher-linux/dbipatcher bin/dbipatcher
+
+    - name: Run multi-language build script
+      run: |
+        python3 build.py --version 845 --language en
+        # 也可以不指定参数构建所有版本和语言
+        # python3 build.py
+
+    - name: List generated files
+      run: |
+        echo "Generated NRO files:"
+        find output -name "*.nro" -type f | head -20
+        echo "Total files: $(find output -name "*.nro" -type f | wc -l)"
+
+    - name: Upload generated NRO files
+      uses: actions/upload-artifact@v4
+      with:
+        name: multi-language-nros
+        path: output/
+        if-no-files-found: warn
+
+  release:
+    needs: [build, build-all-nros]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Display structure of downloaded files
+      run: |
+        echo "Artifacts structure:"
+        find . -name "dbipatcher*" -type f
+        find . -name "*.nro" -type f | head -10
+
+    - name: Create release assets directory
+      run: |
+        mkdir -p release_assets
+        # 复制所有 dbipatcher 可执行文件
+        find . -name "dbipatcher*" -type f -exec cp {} release_assets/ \;
+        # 复制生成的 NRO 文件
+        mkdir -p release_assets/nro_files
+        find . -name "*.nro" -type f -exec cp {} release_assets/nro_files/ \;
+
+    - name: List release assets
+      run: |
+        echo "Release assets:"
+        ls -la release_assets/
+        echo "NRO files:"
+        ls -la release_assets/nro_files/ | head -20
+        echo "Total NRO files: $(ls -la release_assets/nro_files/ | grep .nro | wc -l)"
+
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release_assets/dbipatcher*
+          release_assets/nro_files/*.nro
