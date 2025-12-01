@@ -1,22 +1,24 @@
 # 检测操作系统
-ifeq ($(OS),Windows_NT)
-    detected_OS := Windows
-else
-    detected_OS := $(shell uname -s)
-endif
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
 
 # 根据操作系统设置可执行文件扩展名
-ifeq ($(detected_OS),Windows)
+ifeq ($(UNAME_S),Windows_NT)
     TARGET_EXTENSION = .exe
-    MKDIR = if not exist $(subst /,\,$(1)) mkdir $(subst /,\,$(1))
-    RMDIR = if exist $(subst /,\,$(1)) rmdir /s /q $(subst /,\,$(1))
-    RM = if exist $(subst /,\,$(1)) del /q $(subst /,\,$(1))
 else
     TARGET_EXTENSION =
-    MKDIR = mkdir -p $(1)
-    RMDIR = rm -rf $(1)
-    RM = rm -f $(1)
 endif
+
+# 根据架构和操作系统设置平台
+ifeq ($(UNAME_S),Linux)
+    PLATFORM = linux
+else ifeq ($(UNAME_S),Darwin)
+    PLATFORM = macos
+else
+    PLATFORM = unknown
+endif
+
+ARCH = $(UNAME_M)
 
 CC = gcc
 
@@ -37,12 +39,7 @@ SRCDIR = src
 BUILDDIR = build
 BINDIR = bin
 
-# Windows 和 Unix 的文件查找方式不同
-ifeq ($(detected_OS),Windows)
-    SOURCES = $(shell dir /s /b *.c 2>nul)
-else
-    SOURCES = $(shell find $(SRCDIR) -name '*.c')
-endif
+SOURCES = $(shell find $(SRCDIR) -name '*.c')
 
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
@@ -51,27 +48,52 @@ TARGET = $(BINDIR)/dbipatcher$(TARGET_EXTENSION)
 # 默认目标
 all: $(TARGET)
 
-$(TARGET): $(OBJECTS)
-	@$(call MKDIR,$(BINDIR))
+$(TARGET): $(OBJECTS) | $(BUILDDIR) $(BINDIR)
 	$(CC) $(OBJECTS) -o $@ $(LDLIBS)
 
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c
-	@$(call MKDIR,$(dir $@))
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILDDIR):
+	@mkdir -p $(BUILDDIR)
+
+$(BINDIR):
+	@mkdir -p $(BINDIR)
 
 # 清理构建文件
 clean:
-	@$(call RMDIR,$(BUILDDIR))
-	@$(call RM,$(TARGET))
+	@rm -rf $(BUILDDIR)
+	@rm -f $(TARGET)
 
 # 运行测试
 run: $(TARGET)
 	@$(TARGET)
 
+# 使用 Valgrind 调试 (仅 Linux)
+debug: $(TARGET)
+ifeq ($(UNAME_S),Linux)
+	@valgrind $(TARGET)
+else
+	@echo "Valgrind is only available on Linux"
+	@$(TARGET)
+endif
+
 # 显示构建信息
 info:
-	@echo "Platform: $(detected_OS)"
+	@echo "Platform: $(PLATFORM)"
+	@echo "Architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
-	@echo "Sources: $(words $(SOURCES)) files"
 
-.PHONY: all clean run info
+# 安装依赖 (根据不同平台)
+install-deps:
+ifeq ($(UNAME_S),Linux)
+	sudo apt-get update
+	sudo apt-get install -y build-essential
+	# 如果需要: sudo apt-get install -y libzstd-dev
+else ifeq ($(UNAME_S),Darwin)
+	brew update
+	# 如果需要: brew install zstd
+endif
+
+.PHONY: all clean run debug info install-deps
