@@ -8,6 +8,9 @@ on:
   release:
     types: [ published ]
 
+env:
+  BUILD_TYPE: Release
+
 jobs:
   build:
     strategy:
@@ -18,7 +21,7 @@ jobs:
             artifact_name: dbipatcher-linux
           - os: windows-latest
             name: windows
-            artifact_name: dbipatcher-windows.exe
+            artifact_name: dbipatcher-windows
           - os: macos-latest
             name: macos
             artifact_name: dbipatcher-macos
@@ -44,40 +47,49 @@ jobs:
         # 如果需要 zstd 库，取消下面的注释
         # brew install zstd
 
-    - name: Build dbipatcher
+    - name: Build dbipatcher (Linux/macOS)
+      if: matrix.os != 'windows-latest'
       run: |
         make
-        # 在 Windows 上需要特殊处理可执行文件扩展名
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          if [ -f "bin/dbipatcher" ]; then
-            mv bin/dbipatcher bin/dbipatcher.exe
-          fi
+        ls -la bin/
+
+    - name: Build dbipatcher (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        make
+        # 在 Windows 上检查生成的文件
+        dir bin\
+        # 如果生成了没有扩展名的文件，重命名为 .exe
+        if exist "bin\dbipatcher" (
+          move "bin\dbipatcher" "bin\dbipatcher.exe"
+        )
+
+    - name: Test build output (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        if [ -f "bin/dbipatcher" ]; then
+          echo "Build successful - dbipatcher exists"
+          chmod +x bin/dbipatcher
+          # 测试程序是否能运行
+          ./bin/dbipatcher --help || echo "Help command failed but build succeeded"
+        else
+          echo "Error: dbipatcher not found in bin/"
+          ls -la bin/
+          exit 1
         fi
 
-    - name: Test build output
+    - name: Test build output (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: cmd
       run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          if [ -f "bin/dbipatcher.exe" ]; then
-            echo "Build successful - dbipatcher.exe exists"
-            # 在 Windows 上尝试运行程序
-            ./bin/dbipatcher.exe --help || true
-          else
-            echo "Error: dbipatcher.exe not found"
-            ls -la bin/
-            exit 1
-          fi
-        else
-          if [ -f "bin/dbipatcher" ]; then
-            echo "Build successful - dbipatcher exists"
-            chmod +x bin/dbipatcher
-            # 测试程序是否能运行
-            ./bin/dbipatcher --help || true
-          else
-            echo "Error: dbipatcher not found"
-            ls -la bin/
-            exit 1
-          fi
-        fi
+        if exist "bin\dbipatcher.exe" (
+          echo "Build successful - dbipatcher.exe exists"
+          bin\dbipatcher.exe --help || echo "Help command failed but build succeeded"
+        ) else (
+          echo "Error: dbipatcher.exe not found in bin\"
+          dir bin\
+          exit 1
+        )
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
@@ -85,7 +97,7 @@ jobs:
         name: ${{ matrix.artifact_name }}
         path: |
           bin/dbipatcher*
-          !bin/*.o
+          bin/*.exe
         if-no-files-found: error
 
   build-all-nros:
@@ -104,12 +116,19 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: Make dbipatcher executable
+    - name: Prepare build environment
       run: |
-        chmod +x dbipatcher-linux/dbipatcher
-        # 复制到 bin 目录供 Python 脚本使用
+        # 创建 bin 目录并设置可执行权限
         mkdir -p bin
-        cp dbipatcher-linux/dbipatcher bin/dbipatcher
+        if [ -f "dbipatcher-linux/dbipatcher" ]; then
+          cp dbipatcher-linux/dbipatcher bin/dbipatcher
+          chmod +x bin/dbipatcher
+          echo "Using Linux build for NRO generation"
+        else
+          echo "Error: Linux build not found"
+          ls -la
+          exit 1
+        fi
 
     - name: Run multi-language build script
       run: |
@@ -160,7 +179,7 @@ jobs:
         ls -la release_assets/
         echo "NRO files:"
         ls -la release_assets/nro_files/ | head -20
-        echo "Total NRO files: $(ls -la release_assets/nro_files/ | grep .nro | wc -l)"
+        echo "Total NRO files: $(ls -la release_assets/nro_files/ | grep -c '.nro' || true)"
 
     - name: Upload release assets
       uses: softprops/action-gh-release@v1
